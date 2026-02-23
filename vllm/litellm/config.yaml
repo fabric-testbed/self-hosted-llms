@@ -51,7 +51,7 @@ litellm_settings:
 
 # Optional: General parameters applied to all requests
 general_settings:
-  master_key: ${LITELLM_MASTER_KEY}  # API key for proxy authentication
+  master_key: os.environ/LITELLM_MASTER_KEY  # API key for proxy authentication
   database_url: postgresql://litellm:litellm@postgres:5432/litellm  # Optional DB
   store_model_in_db: false  # Set to true to persist config in DB
 
