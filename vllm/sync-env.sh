@@ -46,7 +46,7 @@ if [ -z "$HF_TOKEN" ]; then
 fi
 
 # Model directories
-MODEL_DIRS=("gpt-oss-20b" "gpt-oss-120b" "qwen-30b" "qwen-14b-awq")
+MODEL_DIRS=("gpt-oss-20b" "gpt-oss-120b" "qwen-30b" "qwen-14b-awq" "qwen-7b-awq")
 
 for dir in "${MODEL_DIRS[@]}"; do
     if [ -d "$dir" ]; then

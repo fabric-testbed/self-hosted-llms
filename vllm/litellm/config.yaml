@@ -29,6 +29,19 @@ model_list:
       max_tokens: 131072
       supports_function_calling: true
 
+  # Qwen 2.5 7B AWQ - Lightweight Turing GPU compatible model
+  - model_name: qwen-7b-awq
+    litellm_params:
+      model: hosted_vllm/qwen-7b-awq
+      api_base: http://vllm-qwen-7b-awq:8000/v1
+      api_key: "not-used"
+      rpm: 150
+      tpm: 150000
+    model_info:
+      description: "Qwen 2.5 7B AWQ model (Turing GPU compatible, lightweight)"
+      max_tokens: 131072
+      supports_function_calling: true
+
 # Router settings for load balancing and failover
 router_settings:
   routing_strategy: simple-shuffle  # Options: simple-shuffle, least-busy, usage-based-routing-v2
