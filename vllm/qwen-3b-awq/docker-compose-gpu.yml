@@ -1,8 +1,8 @@
 services:
-  vllm-qwen-7b-awq:
+  vllm-qwen-3b-awq:
     image: vllm/vllm-openai:v0.6.6.post1
-    container_name: vllm-qwen-7b-awq
-    hostname: vllm-qwen-7b-awq
+    container_name: vllm-qwen-3b-awq
+    hostname: vllm-qwen-3b-awq
 
     environment:
       # DGX Spark optimizations
@@ -45,8 +45,8 @@ services:
       start_period: 300s  # 5 minutes for model loading
 
     command: >
-      --model Qwen/Qwen2.5-7B-Instruct-AWQ
-      --served-model-name qwen-7b-awq
+      --model Qwen/Qwen2.5-3B-Instruct-AWQ
+      --served-model-name qwen-3b-awq
       --enable-auto-tool-choice
       --tool-call-parser hermes
       --gpu-memory-utilization 0.95
