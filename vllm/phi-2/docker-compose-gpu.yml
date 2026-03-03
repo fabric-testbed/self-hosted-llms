@@ -1,25 +1,20 @@
 services:
-  vllm-qwen-3b-awq:
+  vllm-phi-2:
     image: vllm/vllm-openai:v0.6.6.post1
-    container_name: vllm-qwen-3b-awq
-    hostname: vllm-qwen-3b-awq
+    container_name: vllm-phi-2
+    hostname: vllm-phi-2
 
     environment:
-      # DGX Spark optimizations
       - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
       - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
 
-      # HuggingFace token for gated models
       - HF_TOKEN=${HF_TOKEN}
       - HF_HOME=/root/.cache/huggingface
 
     volumes:
-      # Shared HuggingFace cache
       - huggingface_cache:/root/.cache/huggingface
-      - ./chat.template:/root/chat.template
 
-    # GPU configuration - assign specific GPU
     deploy:
       resources:
         reservations:
@@ -42,19 +37,17 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 300s  # 5 minutes for model loading
+      start_period: 120s
 
     command: >
-      --model Qwen/Qwen2.5-3B-Instruct-AWQ
-      --served-model-name qwen-3b-awq
-      --enable-auto-tool-choice
-      --tool-call-parser hermes
-      --gpu-memory-utilization 0.95
+      --model microsoft/phi-2
+      --served-model-name phi-2
+      --dtype half
+      --gpu-memory-utilization 0.90
       --tensor-parallel-size 1
       --trust-remote-code
       --download-dir /root/.cache/huggingface
 
-    # Join shared network for nginx
     networks:
       - vllm_network
 
@@ -70,4 +63,4 @@ networks:
   vllm_network:
     name: vllm_network
     driver: bridge
-    external: true  # Network created by first model
+    external: true
