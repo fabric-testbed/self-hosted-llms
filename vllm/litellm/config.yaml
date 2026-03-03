@@ -29,18 +29,18 @@ model_list:
       max_tokens: 131072
       supports_function_calling: true
 
-  # Qwen 2.5 3B AWQ - Lightweight Turing GPU compatible model
-  - model_name: qwen-3b-awq
+  # Phi-2 - Microsoft's compact model (FP16, Turing GPU compatible, ungated)
+  - model_name: phi-2
     litellm_params:
-      model: hosted_vllm/qwen-3b-awq
-      api_base: http://vllm-qwen-3b-awq:8000/v1
+      model: hosted_vllm/phi-2
+      api_base: http://vllm-phi-2:8000/v1
       api_key: "not-used"
       rpm: 150
       tpm: 150000
     model_info:
-      description: "Qwen 2.5 3B AWQ model (Turing GPU compatible, lightweight)"
-      max_tokens: 131072
-      supports_function_calling: true
+      description: "Microsoft Phi-2 2.7B (FP16, Turing GPU compatible)"
+      max_tokens: 2048
+      supports_function_calling: false
 
 # Router settings for load balancing and failover
 router_settings:
@@ -61,7 +61,7 @@ litellm_settings:
   cache_type: redis
 
   # Logging
-  set_verbose: false
+  set_verbose: true
   json_logs: true
 
   # Request/Response modifications
