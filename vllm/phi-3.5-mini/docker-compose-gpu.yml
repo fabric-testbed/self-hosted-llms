@@ -1,8 +1,8 @@
 services:
-  vllm-phi-2:
+  vllm-phi-3.5-mini:
     image: vllm/vllm-openai:v0.6.6.post1
-    container_name: vllm-phi-2
-    hostname: vllm-phi-2
+    container_name: vllm-phi-3.5-mini
+    hostname: vllm-phi-3.5-mini
 
     environment:
       - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
@@ -40,8 +40,8 @@ services:
       start_period: 120s
 
     command: >
-      --model microsoft/phi-2
-      --served-model-name phi-2
+      --model microsoft/Phi-3.5-mini-instruct
+      --served-model-name phi-3.5-mini
       --dtype half
       --gpu-memory-utilization 0.90
       --tensor-parallel-size 1

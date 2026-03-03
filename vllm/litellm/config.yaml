@@ -29,18 +29,18 @@ model_list:
       max_tokens: 131072
       supports_function_calling: true
 
-  # Phi-2 - Microsoft's compact model (FP16, Turing GPU compatible, ungated)
-  - model_name: phi-2
+  # Phi-3.5 Mini Instruct - Microsoft's instruct model (FP16, Turing GPU compatible, ungated)
+  - model_name: phi-3.5-mini
     litellm_params:
-      model: hosted_vllm/phi-2
-      api_base: http://vllm-phi-2:8000/v1
+      model: hosted_vllm/phi-3.5-mini
+      api_base: http://vllm-phi-3.5-mini:8000/v1
       api_key: "not-used"
       rpm: 150
       tpm: 150000
     model_info:
-      description: "Microsoft Phi-2 2.7B (FP16, Turing GPU compatible)"
-      max_tokens: 2048
-      supports_function_calling: false
+      description: "Microsoft Phi-3.5 Mini Instruct 3.8B (FP16, Turing GPU compatible)"
+      max_tokens: 131072
+      supports_function_calling: true
 
 # Router settings for load balancing and failover
 router_settings:
