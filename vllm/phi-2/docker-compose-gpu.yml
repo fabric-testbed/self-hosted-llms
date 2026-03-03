@@ -14,6 +14,7 @@ services:
 
     volumes:
       - huggingface_cache:/root/.cache/huggingface
+      - ./chat.template:/root/chat.template
 
     deploy:
       resources:
@@ -47,6 +48,7 @@ services:
       --tensor-parallel-size 1
       --trust-remote-code
       --download-dir /root/.cache/huggingface
+      --chat-template /root/chat.template
 
     networks:
       - vllm_network
