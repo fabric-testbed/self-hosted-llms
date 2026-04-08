@@ -11,12 +11,14 @@ services:
     container_name: vllm-gemma-4-27b
     hostname: vllm-gemma-4-27b
 
+    ports:
+      - "8000:8000"
+
     environment:
       # DGX Spark optimizations
       - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
       - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
-      - VLLM_USE_V1=1
 
       # HuggingFace token for gated models
       - HF_TOKEN=${HF_TOKEN}
@@ -61,11 +63,12 @@ services:
     #   nvidia/Gemma-4-31B-IT-NVFP4    - Dense 31B NVFP4 quantized (~8GB)
     #   google/gemma-4-E4B-it          - Efficient 4B
     #   google/gemma-4-E2B-it          - Efficient 2B
+    # Note: vllm/vllm-openai entrypoint already runs "vllm serve",
+    # so command only needs the model name and flags.
     command: >
-      vllm serve google/gemma-4-26B-A4B-it
+      google/gemma-4-26B-A4B-it
       --served-model-name gemma-4-27b
       --tensor-parallel-size 1
-      --max-model-len 8192
       --gpu-memory-utilization 0.85
       --enable-prefix-caching
       --max-num-seqs 128

@@ -248,6 +248,17 @@ cp .env.example .env
 nano .env  # or use your preferred editor
 ```
 
+**Creating a HuggingFace Token:**
+
+1. Go to https://huggingface.co/settings/tokens
+2. Click **Create new token**
+3. Choose **Fine-grained** token type (recommended)
+4. Set **Repositories permissions** to: `Read access to contents of all public gated repos you can access`
+5. You do **not** need Write access — Read is sufficient for downloading models
+6. Token should start with `hf_` (e.g., `hf_aBcDeFg...`)
+
+> **Note**: Some models (e.g., Llama, Nemotron) are **gated** — you must also accept their license on the model's HuggingFace page before your token can download them. Ungated models (e.g., Gemma 4, Qwen) work without accepting any license.
+
 Your `.env` file should look like:
 ```bash
 # llms/vllm/.env
