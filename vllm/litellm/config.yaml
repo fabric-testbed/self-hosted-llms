@@ -16,6 +16,19 @@ model_list:
       # Explicitly tell LiteLLM this model supports function calling
       supports_function_calling: true
 
+  # GLM-4.7-Flash - 30B-A3B MoE with reasoning and tool calling
+  - model_name: glm-4.7-flash
+    litellm_params:
+      model: hosted_vllm/glm-4.7-flash
+      api_base: http://vllm-glm-4-7-flash:8000/v1
+      api_key: "not-used"
+      rpm: 150
+      tpm: 150000
+    model_info:
+      description: "GLM-4.7-Flash 30B-A3B MoE model with reasoning and tool calling"
+      max_tokens: 131072
+      supports_function_calling: true
+
   # Qwen 2.5 14B AWQ - Turing GPU compatible (compute capability 7.5+)
   - model_name: qwen-14b-awq
     litellm_params:
@@ -41,6 +54,7 @@ model_list:
       description: "Microsoft Phi-2 2.7B (FP16, Turing GPU compatible)"
       max_tokens: 2048
       supports_function_calling: false
+
 
 # Router settings for load balancing and failover
 router_settings:

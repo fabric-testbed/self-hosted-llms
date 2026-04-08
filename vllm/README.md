@@ -27,7 +27,7 @@ This setup provides a production-ready multi-model inference gateway that runs m
 
 Key features:
 - **Unified HTTPS endpoint** with SSL/TLS certificates via NGINX
-- **Intelligent model routing** via LiteLLM to different models (`gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`)
+- **Intelligent model routing** via LiteLLM to different models (`gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`, `glm-4.7-flash`)
 - **Load balancing** across multiple model instances
 - **Request caching** with Redis for repeated queries
 - **Cost tracking** and rate limiting per API key
@@ -65,6 +65,7 @@ Approximate memory requirements per model:
 - **GPT-OSS-20B**: ~20GB GPU memory
 - **GPT-OSS-120B**: ~60GB GPU memory (with FP8 KV cache)
 - **Qwen-30B**: ~30GB GPU memory (with FP8 KV cache)
+- **GLM-4.7-Flash**: ~62GB GPU memory (31B MoE, only 3B active per token)
 
 DGX Spark's 128GB unified memory allows running 1-2 large models or 2-3 smaller models concurrently.
 
@@ -163,6 +164,9 @@ llms/vllm/
 │   ├── docker-compose.yml      # Qwen-30B vLLM server (default)
 │   ├── docker-compose-gpu.yml  # Qwen-30B with dedicated GPUs 1,2
 │   └── chat.template           # Chat template for Qwen models
+├── glm-4.7-flash/
+│   ├── docker-compose.yml      # GLM-4.7-Flash vLLM server (default)
+│   └── docker-compose-gpu.yml  # GLM-4.7-Flash with dedicated GPU 0
 └── litellm/                    # LiteLLM API gateway (handles model routing)
     ├── README.md               # LiteLLM documentation
     ├── docker-compose.yml      # LiteLLM proxy + Redis + PostgreSQL
@@ -259,6 +263,7 @@ cd llms/vllm
 cd gpt-oss-20b && docker compose up -d && cd ..
 cd gpt-oss-120b && docker compose up -d && cd ..
 cd qwen-30b && docker compose up -d && cd ..
+cd glm-4.7-flash && docker compose up -d && cd ..
 
 # Option B: Start specific model (e.g., GPT-OSS-120B only - recommended)
 cd gpt-oss-120b
@@ -389,6 +394,7 @@ cd litellm && docker compose down && cd ..
 cd gpt-oss-120b && docker compose down && cd ..
 cd gpt-oss-20b && docker compose down && cd ..
 cd qwen-30b && docker compose down && cd ..
+cd glm-4.7-flash && docker compose down && cd ..
 
 # Optional: Remove network (only if no other services are using it)
 docker network rm vllm_network
@@ -397,6 +403,7 @@ docker network rm vllm_network
 docker volume rm gpt-oss-120b_huggingface_cache
 docker volume rm gpt-oss-20b_huggingface_cache
 docker volume rm qwen-30b_huggingface_cache
+docker volume rm glm-4.7-flash_huggingface_cache
 ```
 
 ---
@@ -485,6 +492,29 @@ command: >
 - `--tensor-parallel-size`: Increase for multi-GPU setups
 - `--kv-cache-dtype`: Options are `auto`, `fp8`, `fp16` (FP8 saves ~50% memory)
 - `--gpu-memory-utilization`: Default 0.9, increase to 0.95 for maximum throughput
+
+#### GLM-4.7-Flash Configuration
+
+Located in `glm-4.7-flash/docker-compose.yml`:
+
+```yaml
+command: >
+  vllm serve zai-org/GLM-4.7-Flash
+    --enable-auto-tool-choice        # Enable automatic tool selection
+    --tool-call-parser glm47         # GLM-4.7 tool call format
+    --reasoning-parser glm45         # GLM reasoning/thinking mode
+    --speculative-config.method mtp  # Multi-token prediction for speed
+    --speculative-config.num_speculative_tokens 1
+    --tensor-parallel-size 1         # Single GPU
+    --max-model-len 8192            # Maximum context length
+    --kv-cache-dtype fp8            # Use FP8 for KV cache compression
+    --trust-remote-code             # Allow remote code execution
+```
+
+**Key parameters to adjust:**
+- `--max-model-len`: Increase up to 131072 for full context (needs more memory)
+- `--gpu-memory-utilization`: Default 0.85, increase to 0.95 for maximum throughput
+- Remove `--speculative-config.*` flags if you hit compatibility issues
 
 #### Qwen-30B Configuration
 
@@ -697,7 +727,8 @@ Response:
   "data": [
     {"id": "gpt-oss-20b", "object": "model"},
     {"id": "gpt-oss-120b", "object": "model"},
-    {"id": "qwen-30b", "object": "model"}
+    {"id": "qwen-30b", "object": "model"},
+    {"id": "glm-4.7-flash", "object": "model"}
   ]
 }
 ```
@@ -853,6 +884,7 @@ docker logs vllm-litellm-proxy -f
 docker logs vllm-gpt-oss-120b -f
 docker logs vllm-qwen-30b -f
 docker logs vllm-gpt-oss-20b -f
+docker logs vllm-glm-4-7-flash -f
 ```
 
 ### Monitor Resource Usage
@@ -890,6 +922,7 @@ cd gpt-oss-20b && docker compose down && cd ..
 cd gpt-oss-120b && docker compose -f docker-compose-gpu.yml down && cd ..
 cd qwen-30b && docker compose -f docker-compose-gpu.yml down && cd ..
 cd gpt-oss-20b && docker compose -f docker-compose-gpu.yml down && cd ..
+cd glm-4.7-flash && docker compose -f docker-compose-gpu.yml down && cd ..
 
 # Or stop specific services without removing containers
 docker stop vllm-nginx-proxy
@@ -897,6 +930,7 @@ docker stop vllm-litellm-proxy
 docker stop vllm-gpt-oss-120b
 docker stop vllm-qwen-30b
 docker stop vllm-gpt-oss-20b
+docker stop vllm-glm-4-7-flash
 
 # Optional: Remove network (only if no other services using it)
 docker network rm vllm_network
