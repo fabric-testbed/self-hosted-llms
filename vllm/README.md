@@ -27,7 +27,7 @@ This setup provides a production-ready multi-model inference gateway that runs m
 
 Key features:
 - **Unified HTTPS endpoint** with SSL/TLS certificates via NGINX
-- **Intelligent model routing** via LiteLLM to different models (`gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`, `glm-4.7-flash`, `gemma-3-27b`, `llama-3.3-70b`)
+- **Intelligent model routing** via LiteLLM to different models (`gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`, `gemma-4-27b`, `nemotron-nano-30b`)
 - **Load balancing** across multiple model instances
 - **Request caching** with Redis for repeated queries
 - **Cost tracking** and rate limiting per API key
@@ -65,9 +65,8 @@ Approximate memory requirements per model:
 - **GPT-OSS-20B**: ~20GB GPU memory
 - **GPT-OSS-120B**: ~60GB GPU memory (with FP8 KV cache)
 - **Qwen-30B**: ~30GB GPU memory (with FP8 KV cache)
-- **GLM-4.7-Flash**: ~62GB GPU memory (31B MoE, only 3B active per token)
-- **Gemma-3-27B**: ~54GB GPU memory (multimodal: text + image)
-- **Llama-3.3-70B**: ~70GB GPU memory (FP8 quantized)
+- **Gemma-4-27B**: ~50GB GPU memory (26B-A4B MoE, only 3.8B active, multimodal)
+- **Nemotron-Nano-30B**: ~60GB GPU memory (30B-A3B Hybrid Mamba-2 MoE, only 3.5B active)
 
 DGX Spark's 128GB unified memory allows running 1-2 large models or 2-3 smaller models concurrently.
 
@@ -166,15 +165,13 @@ llms/vllm/
 │   ├── docker-compose.yml      # Qwen-30B vLLM server (default)
 │   ├── docker-compose-gpu.yml  # Qwen-30B with dedicated GPUs 1,2
 │   └── chat.template           # Chat template for Qwen models
-├── glm-4.7-flash/
-│   ├── docker-compose.yml      # GLM-4.7-Flash vLLM server (default)
-│   └── docker-compose-gpu.yml  # GLM-4.7-Flash with dedicated GPU 0
-├── gemma-3-27b/
-│   ├── docker-compose.yml      # Gemma 3 27B IT vLLM server (default)
-│   └── docker-compose-gpu.yml  # Gemma 3 27B with dedicated GPU 0
-├── llama-3.3-70b/
-│   ├── docker-compose.yml      # Llama 3.3 70B FP8 vLLM server (default)
-│   └── docker-compose-gpu.yml  # Llama 3.3 70B with dedicated GPU 0
+├── gemma-4-27b/
+│   ├── docker-compose.yml      # Gemma 4 26B A4B IT vLLM server (requires gemma4-cu130 image)
+│   └── docker-compose-gpu.yml  # Gemma 4 26B with dedicated GPU 0
+├── nemotron-nano-30b/
+│   ├── docker-compose.yml      # Nemotron 3 Nano 30B vLLM server (default)
+│   ├── docker-compose-gpu.yml  # Nemotron 3 Nano 30B with dedicated GPU 0
+│   └── setup.sh                # Downloads custom reasoning parser
 └── litellm/                    # LiteLLM API gateway (handles model routing)
     ├── README.md               # LiteLLM documentation
     ├── docker-compose.yml      # LiteLLM proxy + Redis + PostgreSQL
@@ -199,6 +196,23 @@ docker network create vllm_network
 
 # Verify network was created
 docker network ls | grep vllm_network
+```
+
+### Step 1b. Create HuggingFace Cache Directory
+
+Ensure the HuggingFace cache directory exists on the host. The model containers use a bind mount to `~/.cache/huggingface` for sharing downloaded model weights. If this directory doesn't exist, the container will fail to start with a mount error.
+
+```bash
+mkdir -p ~/.cache/huggingface
+```
+
+**Note**: This must be done on **every node** (e.g., both Spark 1 and Spark 2) before starting any model containers. If you see an error like:
+```
+failed to mount local volume: mount /home/<user>/.cache/huggingface:... no such file or directory
+```
+Run the `mkdir` command above, then remove the broken volume and retry:
+```bash
+docker compose down -v && docker compose up -d
 ```
 
 ### Step 2. Generate SSL Certificates
@@ -271,9 +285,8 @@ cd llms/vllm
 cd gpt-oss-20b && docker compose up -d && cd ..
 cd gpt-oss-120b && docker compose up -d && cd ..
 cd qwen-30b && docker compose up -d && cd ..
-cd glm-4.7-flash && docker compose up -d && cd ..
-cd gemma-3-27b && docker compose up -d && cd ..
-cd llama-3.3-70b && docker compose up -d && cd ..
+cd gemma-4-27b && docker compose up -d && cd ..
+cd nemotron-nano-30b && ./setup.sh && docker compose up -d && cd ..
 
 # Option B: Start specific model (e.g., GPT-OSS-120B only - recommended)
 cd gpt-oss-120b
@@ -404,9 +417,8 @@ cd litellm && docker compose down && cd ..
 cd gpt-oss-120b && docker compose down && cd ..
 cd gpt-oss-20b && docker compose down && cd ..
 cd qwen-30b && docker compose down && cd ..
-cd glm-4.7-flash && docker compose down && cd ..
-cd gemma-3-27b && docker compose down && cd ..
-cd llama-3.3-70b && docker compose down && cd ..
+cd gemma-4-27b && docker compose down && cd ..
+cd nemotron-nano-30b && docker compose down && cd ..
 
 # Optional: Remove network (only if no other services are using it)
 docker network rm vllm_network
@@ -415,9 +427,8 @@ docker network rm vllm_network
 docker volume rm gpt-oss-120b_huggingface_cache
 docker volume rm gpt-oss-20b_huggingface_cache
 docker volume rm qwen-30b_huggingface_cache
-docker volume rm glm-4.7-flash_huggingface_cache
-docker volume rm gemma-3-27b_huggingface_cache
-docker volume rm llama-3.3-70b_huggingface_cache
+docker volume rm gemma-4-27b_huggingface_cache
+docker volume rm nemotron-nano-30b_huggingface_cache
 ```
 
 ---
@@ -507,67 +518,57 @@ command: >
 - `--kv-cache-dtype`: Options are `auto`, `fp8`, `fp16` (FP8 saves ~50% memory)
 - `--gpu-memory-utilization`: Default 0.9, increase to 0.95 for maximum throughput
 
-#### Gemma 3 27B IT Configuration
+#### Gemma 4 26B A4B IT Configuration
 
-Located in `gemma-3-27b/docker-compose.yml`:
+Located in `gemma-4-27b/docker-compose.yml`:
+
+> **Important**: Gemma 4 requires a special container image: `vllm/vllm-openai:gemma4-cu130`.
+> Standard NGC vLLM images do NOT support Gemma 4.
 
 ```yaml
+image: vllm/vllm-openai:gemma4-cu130
+
 command: >
-  vllm serve google/gemma-3-27b-it
+  vllm serve google/gemma-4-26B-A4B-it
     --tensor-parallel-size 1         # Single GPU
-    --max-model-len 8192            # Maximum context length (up to 128K)
-    --kv-cache-dtype fp8            # Use FP8 for KV cache compression
-    --trust-remote-code             # Allow remote code execution
+    --max-model-len 8192            # Maximum context length (up to 256K)
+    --gpu-memory-utilization 0.85   # Adjust based on available memory
 ```
 
 **Key parameters to adjust:**
-- `--max-model-len`: Increase up to 131072 for full context (needs more memory)
+- `--max-model-len`: Increase up to 262144 for full 256K context (needs more memory)
 - `--gpu-memory-utilization`: Default 0.85, increase to 0.95 for maximum throughput
-- Gemma 3 27B supports **multimodal** input (text + images) via the Vision API
+- Supports **multimodal** input (text + images) via the Vision API
+- Supports **tool calling** and **reasoning** natively
 
-#### Llama 3.3 70B Instruct FP8 Configuration
+**Alternative Gemma 4 models** (change the model name in docker-compose.yml):
+- `google/gemma-4-31B-it` — Dense 31B (larger, no MoE, ~62GB)
+- `nvidia/Gemma-4-31B-IT-NVFP4` — Dense 31B NVFP4 quantized (~8GB)
+- `google/gemma-4-E4B-it` — Efficient 4B (~8GB)
+- `google/gemma-4-E2B-it` — Efficient 2B (~4GB)
 
-Located in `llama-3.3-70b/docker-compose.yml`:
+#### Nemotron 3 Nano 30B Configuration
 
-```yaml
-command: >
-  vllm serve nvidia/Llama-3.3-70B-Instruct-FP8
-    --enable-auto-tool-choice        # Enable automatic tool selection
-    --tool-call-parser llama3_json   # Llama 3 tool call format
-    --tensor-parallel-size 1         # Single GPU
-    --max-model-len 4096            # Maximum context length
-    --kv-cache-dtype fp8            # Use FP8 for KV cache compression
-    --gpu-memory-utilization 0.90   # Higher util for large model
-    --trust-remote-code             # Allow remote code execution
-```
-
-**Key parameters to adjust:**
-- `--max-model-len`: Keep low (4096) as model weights already use ~70GB; increase only if memory allows
-- For **smaller memory footprint**, switch to AWQ-INT4 (~35GB): replace model with `ibnzterrell/Meta-Llama-3.3-70B-Instruct-AWQ-INT4`
-- `--max-num-seqs`: Default 64, reduce if hitting OOM
-
-#### GLM-4.7-Flash Configuration
-
-Located in `glm-4.7-flash/docker-compose.yml`:
+Located in `nemotron-nano-30b/docker-compose.yml`:
 
 ```yaml
 command: >
-  vllm serve zai-org/GLM-4.7-Flash
+  vllm serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
     --enable-auto-tool-choice        # Enable automatic tool selection
-    --tool-call-parser glm47         # GLM-4.7 tool call format
-    --reasoning-parser glm45         # GLM reasoning/thinking mode
-    --speculative-config.method mtp  # Multi-token prediction for speed
-    --speculative-config.num_speculative_tokens 1
+    --tool-call-parser qwen3_coder   # Qwen3 coder tool call format
+    --reasoning-parser-plugin /root/nano_v3_reasoning_parser.py
+    --reasoning-parser nano_v3       # Custom NVIDIA reasoning parser
     --tensor-parallel-size 1         # Single GPU
-    --max-model-len 8192            # Maximum context length
-    --kv-cache-dtype fp8            # Use FP8 for KV cache compression
-    --trust-remote-code             # Allow remote code execution
+    --max-model-len 8192            # Maximum context length (up to 256K)
+    --trust-remote-code             # Required for Hybrid Mamba-2 architecture
 ```
 
 **Key parameters to adjust:**
-- `--max-model-len`: Increase up to 131072 for full context (needs more memory)
-- `--gpu-memory-utilization`: Default 0.85, increase to 0.95 for maximum throughput
-- Remove `--speculative-config.*` flags if you hit compatibility issues
+- `--max-model-len`: Increase up to 262144 for full 256K context (needs more memory)
+- `--max-num-seqs`: Default 8 (low due to large model); increase if memory allows
+- **Requires setup**: Run `./setup.sh` first to download the custom reasoning parser
+- **Disable reasoning**: Send `"chat_template_kwargs": {"enable_thinking": false}` in `extra_body`
+- **Reasoning budget**: Control thinking length with `"reasoning_budget": 256` in `extra_body`
 
 #### Qwen-30B Configuration
 
@@ -781,9 +782,8 @@ Response:
     {"id": "gpt-oss-20b", "object": "model"},
     {"id": "gpt-oss-120b", "object": "model"},
     {"id": "qwen-30b", "object": "model"},
-    {"id": "glm-4.7-flash", "object": "model"},
-    {"id": "gemma-3-27b", "object": "model"},
-    {"id": "llama-3.3-70b", "object": "model"}
+    {"id": "gemma-4-27b", "object": "model"},
+    {"id": "nemotron-nano-30b", "object": "model"}
   ]
 }
 ```
@@ -939,9 +939,8 @@ docker logs vllm-litellm-proxy -f
 docker logs vllm-gpt-oss-120b -f
 docker logs vllm-qwen-30b -f
 docker logs vllm-gpt-oss-20b -f
-docker logs vllm-glm-4-7-flash -f
-docker logs vllm-gemma-3-27b -f
-docker logs vllm-llama-3-3-70b -f
+docker logs vllm-gemma-4-27b -f
+docker logs vllm-nemotron-nano-30b -f
 ```
 
 ### Monitor Resource Usage
@@ -979,9 +978,8 @@ cd gpt-oss-20b && docker compose down && cd ..
 cd gpt-oss-120b && docker compose -f docker-compose-gpu.yml down && cd ..
 cd qwen-30b && docker compose -f docker-compose-gpu.yml down && cd ..
 cd gpt-oss-20b && docker compose -f docker-compose-gpu.yml down && cd ..
-cd glm-4.7-flash && docker compose -f docker-compose-gpu.yml down && cd ..
-cd gemma-3-27b && docker compose -f docker-compose-gpu.yml down && cd ..
-cd llama-3.3-70b && docker compose -f docker-compose-gpu.yml down && cd ..
+cd gemma-4-27b && docker compose -f docker-compose-gpu.yml down && cd ..
+cd nemotron-nano-30b && docker compose -f docker-compose-gpu.yml down && cd ..
 
 # Or stop specific services without removing containers
 docker stop vllm-nginx-proxy
@@ -989,9 +987,8 @@ docker stop vllm-litellm-proxy
 docker stop vllm-gpt-oss-120b
 docker stop vllm-qwen-30b
 docker stop vllm-gpt-oss-20b
-docker stop vllm-glm-4-7-flash
-docker stop vllm-gemma-3-27b
-docker stop vllm-llama-3-3-70b
+docker stop vllm-gemma-4-27b
+docker stop vllm-nemotron-nano-30b
 
 # Optional: Remove network (only if no other services using it)
 docker network rm vllm_network

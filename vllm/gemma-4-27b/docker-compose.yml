@@ -1,8 +1,15 @@
 services:
-  vllm-gemma-3-27b:
-    image: nvcr.io/nvidia/vllm:25.11-py3
-    container_name: vllm-gemma-3-27b
-    hostname: vllm-gemma-3-27b
+  vllm-gemma-4-27b:
+    # Gemma 4 requires a special vLLM container with Gemma 4 support.
+    # Standard NGC vLLM images do NOT support Gemma 4.
+    #
+    # Pull the Gemma 4 container:
+    #   docker pull vllm/vllm-openai:gemma4-cu130
+    #
+    # See: https://build.nvidia.com/spark/vllm (Model Support Matrix)
+    image: vllm/vllm-openai:gemma4-cu130
+    container_name: vllm-gemma-4-27b
+    hostname: vllm-gemma-4-27b
 
     environment:
       # DGX Spark optimizations
@@ -19,13 +26,14 @@ services:
       # Shared HuggingFace cache
       - huggingface_cache:/root/.cache/huggingface
 
-    # GPU configuration - explicit GPU assignment
+    # GPU configuration
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']  # Use GPU 0
+              count: all
+              #device_ids: ['0']  # Use GPU 0
               capabilities: [gpu]
 
     shm_size: 16gb
@@ -42,21 +50,28 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 300s
+      start_period: 300s  # 5 minutes for model loading
 
-    # Gemma 3 27B IT - Multimodal (text + image), 128K context
-    # Memory: ~54GB BF16
+    # Gemma 4 26B A4B IT - Google MoE (26B total, 3.8B active)
+    # Features: multimodal (text + image), tool calling, reasoning, 256K context
+    # Memory: ~50GB BF16, runs as fast as a 4B dense model
+    #
+    # Alternative models (change the model name below):
+    #   google/gemma-4-31B-it          - Dense 31B (larger, no MoE)
+    #   nvidia/Gemma-4-31B-IT-NVFP4    - Dense 31B NVFP4 quantized (~8GB)
+    #   google/gemma-4-E4B-it          - Efficient 4B
+    #   google/gemma-4-E2B-it          - Efficient 2B
     command: >
-      vllm serve google/gemma-3-27b-it
-      --served-model-name gemma-3-27b
+      vllm serve google/gemma-4-26B-A4B-it
+      --served-model-name gemma-4-27b
       --tensor-parallel-size 1
       --max-model-len 8192
-      --kv-cache-dtype fp8
       --gpu-memory-utilization 0.85
       --enable-prefix-caching
       --max-num-seqs 128
       --download-dir /root/.cache/huggingface
-      --trust-remote-code
+      --host 0.0.0.0
+      --port 8000
 
     # Join shared network for nginx
     networks:
@@ -74,4 +89,4 @@ networks:
   vllm_network:
     name: vllm_network
     driver: bridge
-    external: true
+    external: true  # Network created by first model
