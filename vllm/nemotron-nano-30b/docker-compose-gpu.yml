@@ -1,8 +1,8 @@
 services:
-  vllm-gemma-3-27b:
-    image: nvcr.io/nvidia/vllm:25.11-py3
-    container_name: vllm-gemma-3-27b
-    hostname: vllm-gemma-3-27b
+  vllm-nemotron-nano-30b:
+    image: nvcr.io/nvidia/vllm:26.03-py3
+    container_name: vllm-nemotron-nano-30b
+    hostname: vllm-nemotron-nano-30b
 
     environment:
       # DGX Spark optimizations
@@ -18,15 +18,16 @@ services:
     volumes:
       # Shared HuggingFace cache
       - huggingface_cache:/root/.cache/huggingface
+      # Custom reasoning parser (download with setup.sh)
+      - ./nano_v3_reasoning_parser.py:/root/nano_v3_reasoning_parser.py
 
-    # GPU configuration
+    # GPU configuration - explicit GPU assignment
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
-              #device_ids: ['0']  # Use GPU 0
+              device_ids: ['0']  # Use GPU 0
               capabilities: [gpu]
 
     shm_size: 16gb
@@ -43,21 +44,24 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 300s  # 5 minutes for model loading
+      start_period: 300s
 
-    # Gemma 3 27B IT - Multimodal (text + image), 128K context
-    # Memory: ~54GB BF16
     command: >
-      vllm serve google/gemma-3-27b-it
-      --served-model-name gemma-3-27b
+      vllm serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+      --served-model-name nemotron-nano-30b
+      --enable-auto-tool-choice
+      --tool-call-parser qwen3_coder
+      --reasoning-parser-plugin /root/nano_v3_reasoning_parser.py
+      --reasoning-parser nano_v3
       --tensor-parallel-size 1
       --max-model-len 8192
-      --kv-cache-dtype fp8
       --gpu-memory-utilization 0.85
       --enable-prefix-caching
-      --max-num-seqs 128
+      --max-num-seqs 8
       --download-dir /root/.cache/huggingface
       --trust-remote-code
+      --host 0.0.0.0
+      --port 8000
 
     # Join shared network for nginx
     networks:

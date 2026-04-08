@@ -1,8 +1,9 @@
 services:
-  vllm-llama-3-3-70b:
-    image: nvcr.io/nvidia/vllm:25.11-py3
-    container_name: vllm-llama-3-3-70b
-    hostname: vllm-llama-3-3-70b
+  vllm-gemma-4-27b:
+    # Gemma 4 requires a special vLLM container. See docker-compose.yml for details.
+    image: vllm/vllm-openai:gemma4-cu130
+    container_name: vllm-gemma-4-27b
+    hostname: vllm-gemma-4-27b
 
     environment:
       # DGX Spark optimizations
@@ -19,14 +20,13 @@ services:
       # Shared HuggingFace cache
       - huggingface_cache:/root/.cache/huggingface
 
-    # GPU configuration
+    # GPU configuration - explicit GPU assignment
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              count: all
-              #device_ids: ['0']  # Use GPU 0
+              device_ids: ['0']  # Use GPU 0
               capabilities: [gpu]
 
     shm_size: 16gb
@@ -43,26 +43,19 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 600s  # 10 minutes - large model takes longer to load
+      start_period: 300s
 
-    # Llama 3.3 70B Instruct FP8 - NVIDIA quantized, 128K context
-    # Memory: ~70GB FP8 (fits on single Spark with reduced context)
-    # For AWQ-INT4 (~35GB), replace model with:
-    #   ibnzterrell/Meta-Llama-3.3-70B-Instruct-AWQ-INT4
-    #   and remove --kv-cache-dtype fp8
     command: >
-      vllm serve nvidia/Llama-3.3-70B-Instruct-FP8
-      --served-model-name llama-3.3-70b
-      --enable-auto-tool-choice
-      --tool-call-parser llama3_json
+      vllm serve google/gemma-4-26B-A4B-it
+      --served-model-name gemma-4-27b
       --tensor-parallel-size 1
-      --max-model-len 4096
-      --kv-cache-dtype fp8
-      --gpu-memory-utilization 0.90
+      --max-model-len 8192
+      --gpu-memory-utilization 0.85
       --enable-prefix-caching
-      --max-num-seqs 64
+      --max-num-seqs 128
       --download-dir /root/.cache/huggingface
-      --trust-remote-code
+      --host 0.0.0.0
+      --port 8000
 
     # Join shared network for nginx
     networks:

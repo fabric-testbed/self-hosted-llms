@@ -16,17 +16,30 @@ model_list:
       # Explicitly tell LiteLLM this model supports function calling
       supports_function_calling: true
 
-  # GLM-4.7-Flash - 30B-A3B MoE with reasoning and tool calling
-  - model_name: glm-4.7-flash
+  # Gemma 4 26B A4B IT - Google MoE multimodal (text + image), tool calling, reasoning
+  - model_name: gemma-4-27b
     litellm_params:
-      model: hosted_vllm/glm-4.7-flash
-      api_base: http://vllm-glm-4-7-flash:8000/v1
+      model: hosted_vllm/gemma-4-27b
+      api_base: http://vllm-gemma-4-27b:8000/v1
       api_key: "not-used"
       rpm: 150
       tpm: 150000
     model_info:
-      description: "GLM-4.7-Flash 30B-A3B MoE model with reasoning and tool calling"
-      max_tokens: 131072
+      description: "Google Gemma 4 26B A4B IT MoE multimodal with tool calling and reasoning"
+      max_tokens: 262144
+      supports_function_calling: true
+
+  # Nemotron 3 Nano 30B-A3B - NVIDIA Hybrid Mamba-2 + Transformer MoE with reasoning
+  - model_name: nemotron-nano-30b
+    litellm_params:
+      model: hosted_vllm/nemotron-nano-30b
+      api_base: http://vllm-nemotron-nano-30b:8000/v1
+      api_key: "not-used"
+      rpm: 150
+      tpm: 150000
+    model_info:
+      description: "NVIDIA Nemotron 3 Nano 30B-A3B BF16 with reasoning and tool calling"
+      max_tokens: 262144
       supports_function_calling: true
 
   # Qwen 2.5 14B AWQ - Turing GPU compatible (compute capability 7.5+)
@@ -39,32 +52,6 @@ model_list:
       tpm: 150000
     model_info:
       description: "Qwen 2.5 14B AWQ model (Turing GPU compatible)"
-      max_tokens: 131072
-      supports_function_calling: true
-
-  # Gemma 3 27B IT - Google's multimodal model (text + image), 128K context
-  - model_name: gemma-3-27b
-    litellm_params:
-      model: hosted_vllm/gemma-3-27b
-      api_base: http://vllm-gemma-3-27b:8000/v1
-      api_key: "not-used"
-      rpm: 150
-      tpm: 150000
-    model_info:
-      description: "Google Gemma 3 27B IT multimodal model (text + image)"
-      max_tokens: 131072
-      supports_function_calling: false
-
-  # Llama 3.3 70B Instruct FP8 - Meta's flagship open model, 128K context
-  - model_name: llama-3.3-70b
-    litellm_params:
-      model: hosted_vllm/llama-3.3-70b
-      api_base: http://vllm-llama-3-3-70b:8000/v1
-      api_key: "not-used"
-      rpm: 100
-      tpm: 100000
-    model_info:
-      description: "Meta Llama 3.3 70B Instruct FP8 with tool calling"
       max_tokens: 131072
       supports_function_calling: true
 

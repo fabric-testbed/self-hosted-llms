@@ -1,8 +1,8 @@
 services:
-  vllm-llama-3-3-70b:
-    image: nvcr.io/nvidia/vllm:25.11-py3
-    container_name: vllm-llama-3-3-70b
-    hostname: vllm-llama-3-3-70b
+  vllm-nemotron-nano-30b:
+    image: nvcr.io/nvidia/vllm:26.03-py3
+    container_name: vllm-nemotron-nano-30b
+    hostname: vllm-nemotron-nano-30b
 
     environment:
       # DGX Spark optimizations
@@ -18,14 +18,17 @@ services:
     volumes:
       # Shared HuggingFace cache
       - huggingface_cache:/root/.cache/huggingface
+      # Custom reasoning parser (download with setup.sh)
+      - ./nano_v3_reasoning_parser.py:/root/nano_v3_reasoning_parser.py
 
-    # GPU configuration - explicit GPU assignment
+    # GPU configuration
     deploy:
       resources:
         reservations:
           devices:
             - driver: nvidia
-              device_ids: ['0']  # Use GPU 0
+              count: all
+              #device_ids: ['0']  # Use GPU 0
               capabilities: [gpu]
 
     shm_size: 16gb
@@ -42,23 +45,27 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 600s  # 10 minutes - large model takes longer to load
+      start_period: 300s  # 5 minutes for model loading
 
-    # Llama 3.3 70B Instruct FP8 - NVIDIA quantized, 128K context
-    # Memory: ~70GB FP8
+    # Nemotron 3 Nano 30B-A3B - Hybrid Mamba-2 + Transformer MoE
+    # Memory: ~60GB BF16 weights, only 3.5B active per token
+    # Features: tool calling, reasoning traces, 256K context
     command: >
-      vllm serve nvidia/Llama-3.3-70B-Instruct-FP8
-      --served-model-name llama-3.3-70b
+      vllm serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
+      --served-model-name nemotron-nano-30b
       --enable-auto-tool-choice
-      --tool-call-parser llama3_json
+      --tool-call-parser qwen3_coder
+      --reasoning-parser-plugin /root/nano_v3_reasoning_parser.py
+      --reasoning-parser nano_v3
       --tensor-parallel-size 1
-      --max-model-len 4096
-      --kv-cache-dtype fp8
-      --gpu-memory-utilization 0.90
+      --max-model-len 8192
+      --gpu-memory-utilization 0.85
       --enable-prefix-caching
-      --max-num-seqs 64
+      --max-num-seqs 8
       --download-dir /root/.cache/huggingface
       --trust-remote-code
+      --host 0.0.0.0
+      --port 8000
 
     # Join shared network for nginx
     networks:
@@ -76,4 +83,4 @@ networks:
   vllm_network:
     name: vllm_network
     driver: bridge
-    external: true
+    external: true  # Network created by first model
