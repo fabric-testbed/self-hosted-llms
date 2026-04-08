@@ -10,7 +10,6 @@ services:
       - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
       - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
-      - VLLM_USE_V1=1
 
       # HuggingFace token for gated models
       - HF_TOKEN=${HF_TOKEN}
@@ -45,11 +44,12 @@ services:
       retries: 5
       start_period: 300s
 
+    # Note: vllm/vllm-openai entrypoint already runs "vllm serve",
+    # so command only needs the model name and flags.
     command: >
-      vllm serve google/gemma-4-26B-A4B-it
+      google/gemma-4-26B-A4B-it
       --served-model-name gemma-4-27b
       --tensor-parallel-size 1
-      --max-model-len 8192
       --gpu-memory-utilization 0.85
       --enable-prefix-caching
       --max-num-seqs 128
