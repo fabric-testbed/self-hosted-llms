@@ -1,0 +1,80 @@
+services:
+  vllm-glm-4-7-flash:
+    image: nvcr.io/nvidia/vllm:25.11-py3
+    container_name: vllm-glm-4-7-flash
+    hostname: vllm-glm-4-7-flash
+
+    environment:
+      # DGX Spark optimizations
+      - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
+      - VLLM_USE_V1=1
+
+      # HuggingFace token for gated models
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/root/.cache/huggingface
+
+    volumes:
+      # Shared HuggingFace cache
+      - huggingface_cache:/root/.cache/huggingface
+
+    # GPU configuration - explicit GPU assignment
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']  # Use GPU 0
+              capabilities: [gpu]
+
+    shm_size: 16gb
+    ipc: host
+
+    ulimits:
+      memlock: -1
+      stack: 67108864
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 300s  # 5 minutes for model loading
+
+    command: >
+      vllm serve zai-org/GLM-4.7-Flash
+      --served-model-name glm-4.7-flash
+      --enable-auto-tool-choice
+      --tool-call-parser glm47
+      --reasoning-parser glm45
+      --speculative-config.method mtp
+      --speculative-config.num_speculative_tokens 1
+      --tensor-parallel-size 1
+      --max-model-len 8192
+      --kv-cache-dtype fp8
+      --gpu-memory-utilization 0.85
+      --enable-prefix-caching
+      --max-num-seqs 128
+      --download-dir /root/.cache/huggingface
+      --trust-remote-code
+
+    # Join shared network for nginx
+    networks:
+      - vllm_network
+
+volumes:
+  huggingface_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/.cache/huggingface
+
+networks:
+  vllm_network:
+    name: vllm_network
+    driver: bridge
+    external: true  # Network created by first model
