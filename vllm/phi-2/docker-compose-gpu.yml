@@ -1,0 +1,68 @@
+services:
+  vllm-phi-2:
+    image: vllm/vllm-openai:v0.6.6.post1
+    container_name: vllm-phi-2
+    hostname: vllm-phi-2
+
+    environment:
+      - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
+
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/root/.cache/huggingface
+
+    volumes:
+      - huggingface_cache:/root/.cache/huggingface
+      - ./chat.template:/root/chat.template
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ['0']
+              capabilities: [gpu]
+
+    shm_size: 16gb
+    ipc: host
+
+    ulimits:
+      memlock: -1
+      stack: 67108864
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+
+    command: >
+      --model microsoft/phi-2
+      --served-model-name phi-2
+      --dtype half
+      --gpu-memory-utilization 0.90
+      --tensor-parallel-size 1
+      --trust-remote-code
+      --download-dir /root/.cache/huggingface
+      --chat-template /root/chat.template
+
+    networks:
+      - vllm_network
+
+volumes:
+  huggingface_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/.cache/huggingface
+
+networks:
+  vllm_network:
+    name: vllm_network
+    driver: bridge
+    external: true
