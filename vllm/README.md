@@ -27,7 +27,7 @@ This setup provides a production-ready multi-model inference gateway that runs m
 
 Key features:
 - **Unified HTTPS endpoint** with SSL/TLS certificates via NGINX
-- **Intelligent model routing** via LiteLLM to different models (`gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`, `glm-4.7-flash`)
+- **Intelligent model routing** via LiteLLM to different models (`gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`, `glm-4.7-flash`, `gemma-3-27b`, `llama-3.3-70b`)
 - **Load balancing** across multiple model instances
 - **Request caching** with Redis for repeated queries
 - **Cost tracking** and rate limiting per API key
@@ -66,6 +66,8 @@ Approximate memory requirements per model:
 - **GPT-OSS-120B**: ~60GB GPU memory (with FP8 KV cache)
 - **Qwen-30B**: ~30GB GPU memory (with FP8 KV cache)
 - **GLM-4.7-Flash**: ~62GB GPU memory (31B MoE, only 3B active per token)
+- **Gemma-3-27B**: ~54GB GPU memory (multimodal: text + image)
+- **Llama-3.3-70B**: ~70GB GPU memory (FP8 quantized)
 
 DGX Spark's 128GB unified memory allows running 1-2 large models or 2-3 smaller models concurrently.
 
@@ -167,6 +169,12 @@ llms/vllm/
 ├── glm-4.7-flash/
 │   ├── docker-compose.yml      # GLM-4.7-Flash vLLM server (default)
 │   └── docker-compose-gpu.yml  # GLM-4.7-Flash with dedicated GPU 0
+├── gemma-3-27b/
+│   ├── docker-compose.yml      # Gemma 3 27B IT vLLM server (default)
+│   └── docker-compose-gpu.yml  # Gemma 3 27B with dedicated GPU 0
+├── llama-3.3-70b/
+│   ├── docker-compose.yml      # Llama 3.3 70B FP8 vLLM server (default)
+│   └── docker-compose-gpu.yml  # Llama 3.3 70B with dedicated GPU 0
 └── litellm/                    # LiteLLM API gateway (handles model routing)
     ├── README.md               # LiteLLM documentation
     ├── docker-compose.yml      # LiteLLM proxy + Redis + PostgreSQL
@@ -264,6 +272,8 @@ cd gpt-oss-20b && docker compose up -d && cd ..
 cd gpt-oss-120b && docker compose up -d && cd ..
 cd qwen-30b && docker compose up -d && cd ..
 cd glm-4.7-flash && docker compose up -d && cd ..
+cd gemma-3-27b && docker compose up -d && cd ..
+cd llama-3.3-70b && docker compose up -d && cd ..
 
 # Option B: Start specific model (e.g., GPT-OSS-120B only - recommended)
 cd gpt-oss-120b
@@ -395,6 +405,8 @@ cd gpt-oss-120b && docker compose down && cd ..
 cd gpt-oss-20b && docker compose down && cd ..
 cd qwen-30b && docker compose down && cd ..
 cd glm-4.7-flash && docker compose down && cd ..
+cd gemma-3-27b && docker compose down && cd ..
+cd llama-3.3-70b && docker compose down && cd ..
 
 # Optional: Remove network (only if no other services are using it)
 docker network rm vllm_network
@@ -404,6 +416,8 @@ docker volume rm gpt-oss-120b_huggingface_cache
 docker volume rm gpt-oss-20b_huggingface_cache
 docker volume rm qwen-30b_huggingface_cache
 docker volume rm glm-4.7-flash_huggingface_cache
+docker volume rm gemma-3-27b_huggingface_cache
+docker volume rm llama-3.3-70b_huggingface_cache
 ```
 
 ---
@@ -492,6 +506,45 @@ command: >
 - `--tensor-parallel-size`: Increase for multi-GPU setups
 - `--kv-cache-dtype`: Options are `auto`, `fp8`, `fp16` (FP8 saves ~50% memory)
 - `--gpu-memory-utilization`: Default 0.9, increase to 0.95 for maximum throughput
+
+#### Gemma 3 27B IT Configuration
+
+Located in `gemma-3-27b/docker-compose.yml`:
+
+```yaml
+command: >
+  vllm serve google/gemma-3-27b-it
+    --tensor-parallel-size 1         # Single GPU
+    --max-model-len 8192            # Maximum context length (up to 128K)
+    --kv-cache-dtype fp8            # Use FP8 for KV cache compression
+    --trust-remote-code             # Allow remote code execution
+```
+
+**Key parameters to adjust:**
+- `--max-model-len`: Increase up to 131072 for full context (needs more memory)
+- `--gpu-memory-utilization`: Default 0.85, increase to 0.95 for maximum throughput
+- Gemma 3 27B supports **multimodal** input (text + images) via the Vision API
+
+#### Llama 3.3 70B Instruct FP8 Configuration
+
+Located in `llama-3.3-70b/docker-compose.yml`:
+
+```yaml
+command: >
+  vllm serve nvidia/Llama-3.3-70B-Instruct-FP8
+    --enable-auto-tool-choice        # Enable automatic tool selection
+    --tool-call-parser llama3_json   # Llama 3 tool call format
+    --tensor-parallel-size 1         # Single GPU
+    --max-model-len 4096            # Maximum context length
+    --kv-cache-dtype fp8            # Use FP8 for KV cache compression
+    --gpu-memory-utilization 0.90   # Higher util for large model
+    --trust-remote-code             # Allow remote code execution
+```
+
+**Key parameters to adjust:**
+- `--max-model-len`: Keep low (4096) as model weights already use ~70GB; increase only if memory allows
+- For **smaller memory footprint**, switch to AWQ-INT4 (~35GB): replace model with `ibnzterrell/Meta-Llama-3.3-70B-Instruct-AWQ-INT4`
+- `--max-num-seqs`: Default 64, reduce if hitting OOM
 
 #### GLM-4.7-Flash Configuration
 
@@ -728,7 +781,9 @@ Response:
     {"id": "gpt-oss-20b", "object": "model"},
     {"id": "gpt-oss-120b", "object": "model"},
     {"id": "qwen-30b", "object": "model"},
-    {"id": "glm-4.7-flash", "object": "model"}
+    {"id": "glm-4.7-flash", "object": "model"},
+    {"id": "gemma-3-27b", "object": "model"},
+    {"id": "llama-3.3-70b", "object": "model"}
   ]
 }
 ```
@@ -885,6 +940,8 @@ docker logs vllm-gpt-oss-120b -f
 docker logs vllm-qwen-30b -f
 docker logs vllm-gpt-oss-20b -f
 docker logs vllm-glm-4-7-flash -f
+docker logs vllm-gemma-3-27b -f
+docker logs vllm-llama-3-3-70b -f
 ```
 
 ### Monitor Resource Usage
@@ -923,6 +980,8 @@ cd gpt-oss-120b && docker compose -f docker-compose-gpu.yml down && cd ..
 cd qwen-30b && docker compose -f docker-compose-gpu.yml down && cd ..
 cd gpt-oss-20b && docker compose -f docker-compose-gpu.yml down && cd ..
 cd glm-4.7-flash && docker compose -f docker-compose-gpu.yml down && cd ..
+cd gemma-3-27b && docker compose -f docker-compose-gpu.yml down && cd ..
+cd llama-3.3-70b && docker compose -f docker-compose-gpu.yml down && cd ..
 
 # Or stop specific services without removing containers
 docker stop vllm-nginx-proxy
@@ -931,6 +990,8 @@ docker stop vllm-gpt-oss-120b
 docker stop vllm-qwen-30b
 docker stop vllm-gpt-oss-20b
 docker stop vllm-glm-4-7-flash
+docker stop vllm-gemma-3-27b
+docker stop vllm-llama-3-3-70b
 
 # Optional: Remove network (only if no other services using it)
 docker network rm vllm_network

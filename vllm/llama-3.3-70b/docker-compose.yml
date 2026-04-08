@@ -1,0 +1,83 @@
+services:
+  vllm-llama-3-3-70b:
+    image: nvcr.io/nvidia/vllm:25.11-py3
+    container_name: vllm-llama-3-3-70b
+    hostname: vllm-llama-3-3-70b
+
+    environment:
+      # DGX Spark optimizations
+      - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
+      - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+      - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
+      - VLLM_USE_V1=1
+
+      # HuggingFace token for gated models
+      - HF_TOKEN=${HF_TOKEN}
+      - HF_HOME=/root/.cache/huggingface
+
+    volumes:
+      # Shared HuggingFace cache
+      - huggingface_cache:/root/.cache/huggingface
+
+    # GPU configuration
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              #device_ids: ['0']  # Use GPU 0
+              capabilities: [gpu]
+
+    shm_size: 16gb
+    ipc: host
+
+    ulimits:
+      memlock: -1
+      stack: 67108864
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 600s  # 10 minutes - large model takes longer to load
+
+    # Llama 3.3 70B Instruct FP8 - NVIDIA quantized, 128K context
+    # Memory: ~70GB FP8 (fits on single Spark with reduced context)
+    # For AWQ-INT4 (~35GB), replace model with:
+    #   ibnzterrell/Meta-Llama-3.3-70B-Instruct-AWQ-INT4
+    #   and remove --kv-cache-dtype fp8
+    command: >
+      vllm serve nvidia/Llama-3.3-70B-Instruct-FP8
+      --served-model-name llama-3.3-70b
+      --enable-auto-tool-choice
+      --tool-call-parser llama3_json
+      --tensor-parallel-size 1
+      --max-model-len 4096
+      --kv-cache-dtype fp8
+      --gpu-memory-utilization 0.90
+      --enable-prefix-caching
+      --max-num-seqs 64
+      --download-dir /root/.cache/huggingface
+      --trust-remote-code
+
+    # Join shared network for nginx
+    networks:
+      - vllm_network
+
+volumes:
+  huggingface_cache:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${HOME}/.cache/huggingface
+
+networks:
+  vllm_network:
+    name: vllm_network
+    driver: bridge
+    external: true

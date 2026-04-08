@@ -42,6 +42,32 @@ model_list:
       max_tokens: 131072
       supports_function_calling: true
 
+  # Gemma 3 27B IT - Google's multimodal model (text + image), 128K context
+  - model_name: gemma-3-27b
+    litellm_params:
+      model: hosted_vllm/gemma-3-27b
+      api_base: http://vllm-gemma-3-27b:8000/v1
+      api_key: "not-used"
+      rpm: 150
+      tpm: 150000
+    model_info:
+      description: "Google Gemma 3 27B IT multimodal model (text + image)"
+      max_tokens: 131072
+      supports_function_calling: false
+
+  # Llama 3.3 70B Instruct FP8 - Meta's flagship open model, 128K context
+  - model_name: llama-3.3-70b
+    litellm_params:
+      model: hosted_vllm/llama-3.3-70b
+      api_base: http://vllm-llama-3-3-70b:8000/v1
+      api_key: "not-used"
+      rpm: 100
+      tpm: 100000
+    model_info:
+      description: "Meta Llama 3.3 70B Instruct FP8 with tool calling"
+      max_tokens: 131072
+      supports_function_calling: true
+
   # Phi-2 - Microsoft's compact model (FP16, Turing GPU compatible, ungated)
   - model_name: phi-2
     litellm_params:
