@@ -1,28 +1,19 @@
 services:
-  vllm-gemma-4-27b:
-    # Migrated 2026-08-09 off vllm/vllm-openai:gemma4-cu130.
-    # As of nvcr.io/nvidia/vllm:26.07-py3 the standard NGC image DOES support
-    # Gemma 4 (transformers 5.6.1 + Gemma4ForConditionalGeneration in vLLM 0.24).
-    # local/vllm:26.07-xg024 = 26.07 + xgrammar 0.2.4, required because vLLM 0.24
-    # pins xgrammar 0.2.0 but calls normalize_tool_choice (added in 0.2.4);
-    # without it every tool call returns HTTP 500.
+  vllm-glm-47-flash:
     image: local/vllm:26.07-xg024
-    container_name: vllm-gemma-4-27b
-    hostname: vllm-gemma-4-27b
+    container_name: vllm-glm-47-flash
+    hostname: vllm-glm-47-flash
     ports:
       - "8000:8000"
     environment:
-      # DGX Spark optimizations
       - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
       - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
-      # HuggingFace token for gated models
+      - VLLM_USE_V1=1
       - HF_TOKEN=${HF_TOKEN}
       - HF_HOME=/root/.cache/huggingface
     volumes:
-      # Shared HuggingFace cache
       - huggingface_cache:/root/.cache/huggingface
-    # GPU configuration
     deploy:
       resources:
         reservations:
@@ -42,22 +33,21 @@ services:
       timeout: 10s
       retries: 5
       start_period: 600s
-    # Gemma 4 26B A4B IT - Google MoE (26B total, 3.8B active)
-    # NOTE: the NGC entrypoint does NOT imply "vllm serve" the way
-    # vllm/vllm-openai does, so the command must start with it explicitly.
+    # reasoning-parser separates chain-of-thought from content (GLM is a reasoning model).
+    # guidance backend avoids the broken xgrammar normalize_tool_choice import in this image.
     command: >
-      vllm serve google/gemma-4-26B-A4B-it
-      --served-model-name gemma-4-27b
-      --enable-auto-tool-choice
-      --tool-call-parser gemma4
+      vllm serve GadflyII/GLM-4.7-Flash-NVFP4
       --tensor-parallel-size 1
       --gpu-memory-utilization 0.85
       --enable-prefix-caching
       --max-num-seqs 128
       --download-dir /root/.cache/huggingface
-      --host 0.0.0.0
-      --port 8000
-    # Join shared network for nginx
+      --enable-auto-tool-choice
+      --tool-call-parser glm47
+      --reasoning-parser glm47
+      --structured-outputs-config.backend guidance
+      --trust-remote-code
+      --served-model-name glm-4.7-flash
     networks:
       - vllm_network
 volumes:
