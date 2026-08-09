@@ -87,6 +87,7 @@ LiteLLM reaches co-located models by container name and remote ones by
 
 - **[vLLM Multi-Model Gateway Documentation](vllm/README.md)** - Complete setup, configuration, and usage guide
 - **[DGX Spark Deployment Notes](vllm/DGX-SPARK-DEPLOYMENT-NOTES.md)** - NVFP4 sizing, per-image requirements, multi-node networking, and the failure modes worth knowing before you hit them
+- **[Multi-Node Models (Ray)](vllm/README.md#multi-node-models-ray--tensor-parallelism)** - running one model tensor-parallel across two nodes
 - **[Two-Spark Cluster Guide](vllm/TWO-SPARK-CLUSTER.md)** - background on pairing two Sparks
 - **[vLLM Official Docs](https://docs.vllm.ai/)** - vLLM framework documentation
 - **[OpenAI API Reference](https://platform.openai.com/docs/api-reference)** - API compatibility reference

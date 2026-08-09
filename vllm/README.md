@@ -7,6 +7,7 @@
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Prerequisites](#prerequisites)
+- [Multi-Node Models (Ray + tensor parallelism)](#multi-node-models-ray--tensor-parallelism)
 - [Manual Deployment](#manual-deployment)
 - [Configuration](#configuration)
 - [Usage Examples](#usage-examples)
@@ -210,6 +211,58 @@ llms/vllm/
     ├── quick-start.sh          # LiteLLM deployment script
     └── test-litellm.sh         # LiteLLM endpoint tests
 ```
+
+---
+
+## Multi-Node Models (Ray + tensor parallelism)
+
+Most models here run on one node with `docker compose up -d`. A model whose weights
+exceed a single node's memory (e.g. MiniMax-M2.7 at 135.5 GB on 128 GB Sparks) must be
+sharded across two nodes with tensor parallelism, coordinated by Ray. That uses a
+cluster script rather than compose.
+
+**Where to look:**
+
+| document | what it covers |
+|---|---|
+| **[minimax-m2.7/README.md](minimax-m2.7/README.md)** | current, end-to-end tested two-node deployment — start here |
+| [minimax-m2.7/start-cluster.sh](minimax-m2.7/start-cluster.sh) | the script that starts the Ray head, joins the worker, and launches vLLM |
+| [TWO-SPARK-CLUSTER.md](TWO-SPARK-CLUSTER.md) | background on pairing two Sparks (see its compatibility note for vLLM 0.24) |
+| [DGX-SPARK-DEPLOYMENT-NOTES.md](DGX-SPARK-DEPLOYMENT-NOTES.md) | the multi-node failure modes and how to recognise them |
+
+**Shape of it:**
+
+```bash
+# 0. both nodes: build the Ray image (the NGC image has no Ray)
+cd base-image     && docker build -t local/vllm:26.07-xg024 .
+cd ../base-image-ray && docker build -t local/vllm:26.07-xg024-ray .
+
+# 1. both nodes: pre-download the weights BEFORE stopping anything currently serving
+docker run --rm -v $HOME/.cache/huggingface:/root/.cache/huggingface \
+  -e HF_HOME=/root/.cache/huggingface --entrypoint python3 local/vllm:26.07-xg024-ray \
+  -c 'from huggingface_hub import snapshot_download; snapshot_download("<repo>", max_workers=8)'
+
+# 2. head node only
+cd minimax-m2.7 && ./start-cluster.sh
+```
+
+**Four things that will bite you** (all cost a failed startup here):
+
+1. **`GLOO_SOCKET_IFNAME` is required**, not just `NCCL_SOCKET_IFNAME`. Gloo runs the
+   CPU-side rendezvous before NCCL touches the GPUs; without it the head advertises
+   `127.0.0.1` and the worker dies with
+   `Gloo connectFullMesh failed ... remote=[127.0.0.1]`.
+2. **Leave `VLLM_HOST_IP` unset** on vLLM 0.24 — it breaks the APIServer↔EngineCore
+   handshake and the server hangs in `wait_for_engine_startup` with no error.
+3. **`--network host` is subject to `ufw`; Docker published ports are not.** Ray needs
+   host networking, so the API port and the peer node both need explicit firewall
+   rules — even though single-node models on the same host work fine without them.
+4. **Wait for `ray status` to show `0.0/N GPU` before relaunching.** Killing
+   `vllm serve` does not immediately release the placement group, and the next start
+   sits in `Waiting for creating a placement group ...` looking hung.
+
+Expect **~20 minutes** from launch to `Application startup complete` for a 230B model:
+weight load, torch compile, then CUDA graph capture. Don't call it hung early.
 
 ---
 
