@@ -1,119 +1,116 @@
-# LiteLLM Proxy Configuration for vLLM Multi-Model Gateway
-# This config enables unified API access to all vLLM model servers
-
 model_list:
-  # GPT-OSS-20B - Faster, smaller model
-  - model_name: gpt-oss-20b
-    litellm_params:
-      model: hosted_vllm/gpt-oss-20b
-      api_base: http://vllm-gpt-oss-20b:8000/v1
-      api_key: "not-used"
-      rpm: 150
-      tpm: 150000
-    model_info:
-      description: "GPT-OSS 20B model with Auto-Tool Choice enabled"
-      max_tokens: 131072
-      # Explicitly tell LiteLLM this model supports function calling
-      supports_function_calling: true
-
-  # Gemma 4 26B A4B IT - Google MoE multimodal (text + image), tool calling, reasoning
-  - model_name: gemma-4-27b
-    litellm_params:
-      model: hosted_vllm/gemma-4-27b
-      api_base: http://vllm-gemma-4-27b:8000/v1
-      api_key: "not-used"
-      rpm: 150
-      tpm: 150000
-    model_info:
-      description: "Google Gemma 4 26B A4B IT MoE multimodal with tool calling and reasoning"
-      max_tokens: 262144
-      supports_function_calling: true
-
-  # Nemotron 3 Nano 30B-A3B - NVIDIA Hybrid Mamba-2 + Transformer MoE with reasoning
-  - model_name: nemotron-nano-30b
-    litellm_params:
-      model: hosted_vllm/nemotron-nano-30b
-      api_base: http://vllm-nemotron-nano-30b:8000/v1
-      api_key: "not-used"
-      rpm: 150
-      tpm: 150000
-    model_info:
-      description: "NVIDIA Nemotron 3 Nano 30B-A3B BF16 with reasoning and tool calling"
-      max_tokens: 262144
-      supports_function_calling: true
-
-  # Qwen 2.5 14B AWQ - Turing GPU compatible (compute capability 7.5+)
-  - model_name: qwen-14b-awq
-    litellm_params:
-      model: hosted_vllm/qwen-14b-awq
-      api_base: http://vllm-qwen-14b-awq:8000/v1
-      api_key: "not-used"
-      rpm: 150
-      tpm: 150000
-    model_info:
-      description: "Qwen 2.5 14B AWQ model (Turing GPU compatible)"
-      max_tokens: 131072
-      supports_function_calling: true
-
-  # Phi-2 - Microsoft's compact model (FP16, Turing GPU compatible, ungated)
-  - model_name: phi-2
-    litellm_params:
-      model: hosted_vllm/phi-2
-      api_base: http://vllm-phi-2:8000/v1
-      api_key: "not-used"
-      rpm: 150
-      tpm: 150000
-    model_info:
-      description: "Microsoft Phi-2 2.7B (FP16, Turing GPU compatible)"
-      max_tokens: 2048
-      supports_function_calling: false
-
-
-# Router settings for load balancing and failover
+- model_name: gpt-oss-20b
+  litellm_params:
+    model: hosted_vllm/gpt-oss-20b
+    api_base: http://vllm-gpt-oss-20b:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: GPT-OSS 20B model with Auto-Tool Choice enabled
+    max_tokens: 131072
+    supports_function_calling: true
+- model_name: minimax-m2.7
+  litellm_params:
+    model: hosted_vllm/minimax-m2.7
+    api_base: http://vllm-minimax-m27:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: MiniMax-M2.7 230B-A10B NVFP4 - TP=2 across two DGX Sparks
+    max_tokens: 196608
+    supports_function_calling: true
+- model_name: qwen3.5-122b
+  litellm_params:
+    model: hosted_vllm/qwen3.5-122b
+    api_base: http://vllm-qwen35-122b:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: Qwen3.5-122B-A10B NVFP4 - hybrid Mamba MoE, single DGX Spark
+    max_tokens: 262144
+    supports_function_calling: true
+- model_name: glm-4.7-flash
+  litellm_params:
+    model: hosted_vllm/glm-4.7-flash
+    api_base: http://vllm-glm-47-flash:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: GLM-4.7-Flash 30B-A3B NVFP4 - glm47 tool + reasoning parsers
+    max_tokens: 202752
+    supports_function_calling: true
+- model_name: gemma-4-27b
+  litellm_params:
+    model: hosted_vllm/gemma-4-27b
+    api_base: http://vllm-gemma-4-27b:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: Google Gemma 4 26B A4B IT MoE multimodal - tool calling via gemma4
+      parser
+    max_tokens: 262144
+    supports_function_calling: true
+- model_name: nemotron-nano-30b
+  litellm_params:
+    model: hosted_vllm/nemotron-nano-30b
+    api_base: http://vllm-nemotron-nano-30b:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: NVIDIA Nemotron 3 Nano 30B-A3B BF16 with reasoning and tool calling
+    max_tokens: 262144
+    supports_function_calling: true
+- model_name: qwen-14b-awq
+  litellm_params:
+    model: hosted_vllm/qwen-14b-awq
+    api_base: http://vllm-qwen-14b-awq:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: Qwen 2.5 14B AWQ model (Turing GPU compatible)
+    max_tokens: 131072
+    supports_function_calling: true
+- model_name: phi-2
+  litellm_params:
+    model: hosted_vllm/phi-2
+    api_base: http://vllm-phi-2:8000/v1
+    api_key: not-used
+    rpm: 150
+    tpm: 150000
+  model_info:
+    description: Microsoft Phi-2 2.7B (FP16, Turing GPU compatible)
+    max_tokens: 2048
+    supports_function_calling: false
 router_settings:
-  routing_strategy: simple-shuffle  # Options: simple-shuffle, least-busy, usage-based-routing-v2
+  routing_strategy: simple-shuffle
   redis_host: redis
   redis_port: 6379
-  num_retries: 2  # Retry failed requests
-  retry_after: 5  # Wait 5 seconds before retry
-  timeout: 600  # 10 minute timeout for long-running requests
-  enable_pre_call_checks: true  # Check model health before routing
-  allowed_fails: 3  # Allow 3 failures before marking model as down
-  cooldown_time: 60  # Wait 60 seconds before retrying failed model
-
-# General LiteLLM settings
+  num_retries: 2
+  retry_after: 5
+  timeout: 600
+  enable_pre_call_checks: true
+  allowed_fails: 3
+  cooldown_time: 60
 litellm_settings:
-  # Caching configuration
   cache: true
   cache_type: redis
-
-  # Logging
   set_verbose: true
   json_logs: true
-
-  # Request/Response modifications
-  drop_params: true  # Drop params not supported by backend
+  drop_params: true
   add_function_to_prompt: false
-
-  # Callbacks for monitoring (optional - uncomment if using)
-  # success_callback: ["langfuse"]
-  # failure_callback: ["langfuse"]
-
-  # Cost tracking
   track_cost_per_model: true
-
-# Optional: General parameters applied to all requests
 general_settings:
-  master_key: os.environ/LITELLM_MASTER_KEY  # API key for proxy authentication
-  database_url: postgresql://litellm:litellm@postgres:5432/litellm  # Optional DB
-  store_model_in_db: false  # Set to true to persist config in DB
-
-  # Admin UI settings
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: postgresql://litellm:litellm@postgres:5432/litellm
+  store_model_in_db: false
   ui_username: admin
   ui_password: ${LITELLM_UI_PASSWORD:-admin}
-
-  # CORS settings
   allow_cors: true
-
-  # Max parallel requests
   max_parallel_requests: 100

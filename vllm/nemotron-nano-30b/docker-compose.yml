@@ -1,26 +1,28 @@
 services:
   vllm-nemotron-nano-30b:
-    image: nvcr.io/nvidia/vllm:26.03-py3
+    # Upgraded 2026-08-09: nvcr 26.03 -> local/vllm:26.07-xg024
+    # (= nvcr.io/nvidia/vllm:26.07-py3 + xgrammar 0.2.4, required because
+    #  vLLM 0.24 pins xgrammar 0.2.0 but calls normalize_tool_choice.)
+    image: local/vllm:26.07-xg024
     container_name: vllm-nemotron-nano-30b
     hostname: vllm-nemotron-nano-30b
-
+    ports:
+      - 8000:8000
     environment:
       # DGX Spark optimizations
       - CUDA_MANAGED_FORCE_DEVICE_ALLOC=1
       - PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
       - VLLM_LOGGING_LEVEL=${VLLM_LOGGING_LEVEL:-INFO}
       - VLLM_USE_V1=1
-
       # HuggingFace token for gated models
       - HF_TOKEN=${HF_TOKEN}
       - HF_HOME=/root/.cache/huggingface
-
     volumes:
       # Shared HuggingFace cache
       - huggingface_cache:/root/.cache/huggingface
-      # Custom reasoning parser (download with setup.sh)
+      # Custom reasoning parser retained for rollback; no longer used - 26.07
+      # ships a built-in nemotron_v3 reasoning parser.
       - ./nano_v3_reasoning_parser.py:/root/nano_v3_reasoning_parser.py
-
     # GPU configuration
     deploy:
       resources:
@@ -28,49 +30,45 @@ services:
           devices:
             - driver: nvidia
               count: all
-              #device_ids: ['0']  # Use GPU 0
               capabilities: [gpu]
-
     shm_size: 16gb
     ipc: host
-
     ulimits:
       memlock: -1
       stack: 67108864
-
     restart: unless-stopped
-
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 300s  # 5 minutes for model loading
-
+      start_period: 600s
     # Nemotron 3 Nano 30B-A3B - Hybrid Mamba-2 + Transformer MoE
     # Memory: ~60GB BF16 weights, only 3.5B active per token
-    # Features: tool calling, reasoning traces, 256K context
+    #
+    # --max-num-batched-tokens: vLLM 0.24 enforces "Mamba cache align mode:
+    #   block_size <= max_num_batched_tokens"; the 2048 default is too small
+    #   for hybrid Mamba models and aborts engine init.
+    # --reasoning-parser nemotron_v3: built into 26.07, replaces the old
+    #   --reasoning-parser-plugin nano_v3 file.
     command: >
       vllm serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
       --served-model-name nemotron-nano-30b
       --enable-auto-tool-choice
       --tool-call-parser qwen3_coder
-      --reasoning-parser-plugin /root/nano_v3_reasoning_parser.py
-      --reasoning-parser nano_v3
+      --reasoning-parser nemotron_v3
       --tensor-parallel-size 1
-      --max-model-len 8192
       --gpu-memory-utilization 0.85
+      --max-num-batched-tokens 8192
       --enable-prefix-caching
       --max-num-seqs 8
       --download-dir /root/.cache/huggingface
       --trust-remote-code
       --host 0.0.0.0
       --port 8000
-
     # Join shared network for nginx
     networks:
       - vllm_network
-
 volumes:
   huggingface_cache:
     driver: local
@@ -78,9 +76,8 @@ volumes:
       type: none
       o: bind
       device: ${HOME}/.cache/huggingface
-
 networks:
   vllm_network:
     name: vllm_network
     driver: bridge
-    external: true  # Network created by first model
+    external: true
