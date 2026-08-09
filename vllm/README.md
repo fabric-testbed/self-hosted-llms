@@ -27,7 +27,8 @@ This setup provides a production-ready multi-model inference gateway that runs m
 
 Key features:
 - **Unified HTTPS endpoint** with SSL/TLS certificates via NGINX
-- **Intelligent model routing** via LiteLLM to different models (`gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`, `gemma-4-27b`, `nemotron-nano-30b`)
+- **Intelligent model routing** via LiteLLM (`qwen3.5-122b`, `minimax-m2.7`, `glm-4.7-flash`, `gemma-4-27b`, `nemotron-nano-30b`, `gpt-oss-20b`, `gpt-oss-120b`, `qwen-30b`)
+- **Models may run on other hosts**, including one model tensor-parallel across two nodes
 - **Load balancing** across multiple model instances
 - **Request caching** with Redis for repeated queries
 - **Cost tracking** and rate limiting per API key
@@ -55,27 +56,43 @@ Key features:
 - **Docker** installed and configured: `docker --version` succeeds
 - **Docker Compose** v2.0+: `docker compose version` succeeds
 - **NVIDIA Container Toolkit** installed
+- **Base image built**: `cd base-image && docker build -t local/vllm:26.07-xg024 .`
+  (every model compose file references it — see [base-image/README.md](base-image/README.md))
 - **HuggingFace account** with access tokens for gated models
 - **Network access** to pull container images and models
 - **Sufficient GPU memory** for running multiple models concurrently
 
 ### GPU Memory Planning
 
-Approximate memory requirements per model:
-- **GPT-OSS-20B**: ~20GB GPU memory
-- **GPT-OSS-120B**: ~60GB GPU memory (with FP8 KV cache)
-- **Qwen-30B**: ~30GB GPU memory (with FP8 KV cache)
-- **Gemma-4-27B**: ~50GB GPU memory (26B-A4B MoE, only 3.8B active, multimodal)
-- **Nemotron-Nano-30B**: ~60GB GPU memory (30B-A3B Hybrid Mamba-2 MoE, only 3.5B active)
+Weight sizes (measured on disk where noted). **Prefer NVFP4 on Blackwell** — it is the
+hardware-native 4-bit format and roughly halves a model versus FP8, which is what lets
+120B-class models fit a single Spark:
 
-DGX Spark's 128GB unified memory allows running 1-2 large models or 2-3 smaller models concurrently.
+| model | weights | notes |
+|---|---|---|
+| GLM-4.7-Flash 30B-A3B NVFP4 | 20.4 GB | measured |
+| GPT-OSS-20B | ~20 GB | |
+| Qwen-30B | ~30 GB | with FP8 KV cache |
+| Gemma-4-27B | ~50 GB | 26B-A4B MoE, 3.8B active, multimodal |
+| GPT-OSS-120B | ~60 GB | with FP8 KV cache |
+| Nemotron-Nano-30B | ~60 GB | 30B-A3B hybrid Mamba-2 MoE, 3.5B active |
+| Qwen3.5-122B-A10B NVFP4 | 75.6 GB | measured; hybrid Mamba MoE |
+| **MiniMax-M2.7 230B-A10B NVFP4** | **135.5 GB** | measured; **exceeds one Spark — needs TP=2** |
+
+A single Spark's 128 GB unified memory holds one large model or several small ones.
+**vLLM reserves `--gpu-memory-utilization` up front regardless of weight size**, so a
+30 GB model at `0.85` still consumes ~103 GB — two models cannot share one Spark.
+
+> **Take sizes from the HuggingFace API (`/api/models/<repo>?blobs=true`), not from
+> model-card prose.** GLM-4.7's card says "183B params" while its weights are 214.1 GB;
+> planning from the card would put it on two Sparks with ~2 GB left for KV cache.
 
 ## Time & Risk
 
 - **Duration**: 15-20 minutes for initial setup
 - **Risks**: Minimal - all services run in isolated containers
 - **Rollback**: Simple container removal, no system-level changes
-- **Last Updated**: 2025-12-19
+- **Last Updated**: 2026-08-09
 
 ---
 
@@ -94,7 +111,7 @@ DGX Spark's 128GB unified memory allows running 1-2 large models or 2-3 smaller 
                              ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                  LiteLLM Proxy (Port 4000)                  │
-│  - Model routing (gpt-oss-20b, gpt-oss-120b, qwen-30b)     │
+│  - Model routing (any configured model, local or remote)    │
 │  - Load balancing across instances                          │
 │  - Request caching (Redis)                                  │
 │  - Cost tracking (PostgreSQL)                               │
@@ -153,6 +170,19 @@ llms/vllm/
 │   └── private.pem             # Private key
 ├── nginx/
 │   └── multi-model.conf        # NGINX config (proxies to LiteLLM)
+├── DGX-SPARK-DEPLOYMENT-NOTES.md  # Sizing, per-image requirements, failure modes
+├── base-image/
+│   ├── Dockerfile              # local/vllm:26.07-xg024 (NGC 26.07 + xgrammar 0.2.4)
+│   └── README.md               # why the xgrammar override is required
+├── base-image-ray/
+│   └── Dockerfile              # adds Ray, for multi-node tensor parallelism
+├── qwen3.5-122b/
+│   └── docker-compose.yml      # Qwen3.5-122B-A10B NVFP4, single node
+├── glm-4.7-flash/
+│   └── docker-compose.yml      # GLM-4.7-Flash 30B-A3B NVFP4, single node
+├── minimax-m2.7/               # MiniMax-M2.7 230B-A10B NVFP4, TWO nodes (TP=2)
+│   ├── README.md               # prerequisites, flags, restart procedure
+│   └── start-cluster.sh        # starts the Ray cluster and vLLM (no compose)
 ├── gpt-oss-20b/
 │   ├── docker-compose.yml      # GPT-OSS-20B vLLM server (default)
 │   ├── docker-compose-gpu.yml  # GPT-OSS-20B with dedicated GPU 0
@@ -166,12 +196,13 @@ llms/vllm/
 │   ├── docker-compose-gpu.yml  # Qwen-30B with dedicated GPUs 1,2
 │   └── chat.template           # Chat template for Qwen models
 ├── gemma-4-27b/
-│   ├── docker-compose.yml      # Gemma 4 26B A4B IT vLLM server (requires gemma4-cu130 image)
+│   ├── docker-compose.yml      # Gemma 4 26B A4B IT vLLM server
 │   └── docker-compose-gpu.yml  # Gemma 4 26B with dedicated GPU 0
 ├── nemotron-nano-30b/
 │   ├── docker-compose.yml      # Nemotron 3 Nano 30B vLLM server (default)
 │   ├── docker-compose-gpu.yml  # Nemotron 3 Nano 30B with dedicated GPU 0
-│   └── setup.sh                # Downloads custom reasoning parser
+│   └── setup.sh                # (legacy) downloaded the custom reasoning parser;
+│                                #  26.07 has a built-in nemotron_v3 parser
 └── litellm/                    # LiteLLM API gateway (handles model routing)
     ├── README.md               # LiteLLM documentation
     ├── docker-compose.yml      # LiteLLM proxy + Redis + PostgreSQL
@@ -533,16 +564,19 @@ command: >
 
 Located in `gemma-4-27b/docker-compose.yml`:
 
-> **Important**: Gemma 4 requires a special container image: `vllm/vllm-openai:gemma4-cu130`.
-> Standard NGC vLLM images do NOT support Gemma 4.
+> **Note**: Gemma 4 previously required the special `vllm/vllm-openai:gemma4-cu130`
+> image. That is no longer true — NGC vLLM **26.07** ships transformers 5.6.1 and
+> `Gemma4ForCausalLM`/`Gemma4ForConditionalGeneration`, and is verified serving this
+> model. Use the standard `local/vllm:26.07-xg024` base image.
 
 ```yaml
-image: vllm/vllm-openai:gemma4-cu130
+image: local/vllm:26.07-xg024
 
 command: >
   vllm serve google/gemma-4-26B-A4B-it
+    --enable-auto-tool-choice        # Enable automatic tool selection
+    --tool-call-parser gemma4        # Gemma 4 tool call format
     --tensor-parallel-size 1         # Single GPU
-    --max-model-len 8192            # Maximum context length (up to 256K)
     --gpu-memory-utilization 0.85   # Adjust based on available memory
 ```
 
@@ -567,10 +601,12 @@ command: >
   vllm serve nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16
     --enable-auto-tool-choice        # Enable automatic tool selection
     --tool-call-parser qwen3_coder   # Qwen3 coder tool call format
-    --reasoning-parser-plugin /root/nano_v3_reasoning_parser.py
-    --reasoning-parser nano_v3       # Custom NVIDIA reasoning parser
+    --reasoning-parser nemotron_v3   # Built into NGC 26.07; replaces the old
+                                     #   --reasoning-parser-plugin nano_v3 file
     --tensor-parallel-size 1         # Single GPU
-    --max-model-len 8192            # Maximum context length (up to 256K)
+    --max-num-batched-tokens 8192   # REQUIRED on vLLM 0.24: Mamba cache align mode
+                                     #   asserts block_size <= max_num_batched_tokens
+                                     #   and the 2048 default aborts engine init
     --trust-remote-code             # Required for Hybrid Mamba-2 architecture
 ```
 
