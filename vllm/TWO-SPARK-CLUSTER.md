@@ -37,6 +37,24 @@ ping <SPARK_2_QSFP_IP>
 
 With 2x 128GB = **256GB unified memory**, you can serve models that don't fit on one Spark.
 
+> ### ⚠️ Compatibility note (2026-08-09)
+>
+> The commands in this section were written against `nvcr.io/nvidia/vllm:25.11-py3`.
+> Two things changed with vLLM 0.24 (NGC 26.07):
+>
+> 1. **Do not set `VLLM_HOST_IP`.** On 0.24 it redirects the APIServer↔EngineCore ZMQ
+>    handshake: the engine logs `init engine ... took N s` and the API server then waits
+>    forever in `wait_for_engine_startup`, never opening its port. The
+>    `*_SOCKET_IFNAME` variables below already pin distributed traffic to the QSFP link,
+>    so `VLLM_HOST_IP` is not needed. (`run_cluster.sh` still needs the head *address*
+>    as a positional argument — that is fine; it is the exported env var that breaks it.)
+> 2. **Ray is not in the NGC image.** Build [`base-image-ray`](base-image-ray) first.
+>
+> For a current, end-to-end tested two-node deployment see
+> **[minimax-m2.7/README.md](minimax-m2.7/README.md)** and its `start-cluster.sh`.
+> Everything below is still correct on the networking side — in particular
+> `GLOO_SOCKET_IFNAME` is genuinely required, not optional.
+
 ### Step 1: Download the Ray Cluster Script (Both Nodes)
 
 ```bash
